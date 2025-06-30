@@ -1,0 +1,19 @@
+train: ../furnas_dataset_v0.07/split_dataset/train/images
+test: ../furnas_dataset_v0.07/split_dataset/test/images
+val: ../furnas_dataset_v0.07/split_dataset/val/images
+
+nc: 11
+names:
+    [
+        "baliser_ok",
+        "baliser_aok",
+        "baliser_nok",
+        "insulator_ok",
+        "insulator_nok",
+        "bird_nest",
+        "stockbridge_ok",
+        "stockbridge_nok",
+        "spacer_ok",
+        "spacer_nok",
+        "insulator_unk",
+    ]

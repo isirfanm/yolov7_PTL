@@ -1,0 +1,17 @@
+# Odessa dataset MTV2
+
+# train and val data as 1) directory: path/images/, 2) file: path/images.txt, or 3) list: [path1/images/, path2/images/]
+train: ./MTV2/MTV2_train_docker.txt
+val: ./MTV2/MTV2_val_docker_100.txt 
+test: ./MTV2/MTV2_test_docker.txt 
+
+# MTV2 Tiny dataset
+# train: ./MTV2/MTV2_tiny_docker.txt 
+# val: ./MTV2/MTV2_tiny_docker.txt 
+# test: ./MTV2/MTV2_tiny_docker.txt 
+
+# number of classes
+nc: 2
+
+# class names
+names: [ 'Boat', 'Human' ]
