@@ -18,8 +18,25 @@ def default_options() -> dict:
         'bbox_interval': -1,
         'save_period': -1,
         'artifact_alias': 'latest',
-        'freeze': [0]
+        'freeze': [0],
+        'rect': False,
+        'nosave': False,
+        'notest': False,
+        'noautoanchor': False,
+        'evolve': False,
+        'cache-images': False,
+        'image-weights': False,
+        'multi-scale': False,
+        'single-cls': False,
+        'adam': False,
+        'sync-bn': False,
+        'exist-ok': False,
+        'quad': False,
+        'linear-lr': False,
+        'upload_dataset': False,
+        'v5-metric': False
     }
+
 
 def merge_default(input: dict) -> dict:
     output = {}
