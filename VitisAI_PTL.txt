@@ -1,0 +1,185 @@
+Content-Type: text/x-zim-wiki
+Wiki-Format: zim 0.6
+Creation-Date: 2024-12-26T10:48:07+07:00
+
+====== Research PTL ======
+Created Thursday 26 December 2024
+
+===== Vitis AI YOLOv7 implementation on KV260 =====
+	based on [[Implement of Yolov7 on Vitis AI KV260]] 
+
+YOLOv7 weight
+yolov7-tiny : https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-tiny.pt
+
+Setup Vitis AI using docker
+	https://xilinx.github.io/Vitis-AI/3.0/html/docs/install/install.html#option-1-leverage-the-pre-built-docker
+
+Clone Vitis AI repository
+	git clone https://github.com/Xilinx/Vitis-AI
+
+Enter directory
+	cd Vitis-AI/
+
+Setup the Host - cross-compiler
+	cd board_setup/mpsoc
+	sudo chmod u+r+x host_cross_compiler_setup.sh
+	[[./host_cross_compiler_setup.sh]]
+
+Activate env for cross compilation
+	source [[~/petalinux_sdk_2022.2/environment-setup-cortexa72-cortexa53-xilinx-linux]]
+
+Run Vitis AI docker
+	cd [[../..]]
+	#sudo ./docker_run.sh xilinx/vitis-ai-pytorch-cpu:latest
+	sudo ./docker_run.sh xilinx/vitis-ai-pytorch-cpu:ubuntu2004-3.0.0.106
+		using vitis ai version 3.0 because the test script to compile is error on version 3.5
+	
+Inside container, activate conda env
+	conda activate vitis-ai-pytorch
+
+Enter working dir
+	cd /workspace
+
+Clone repository YOLOv7 Vitis AI
+	git clone https://github.com/mm0806son/yolov7_VitisAI.git
+
+Enter directory
+	cd yolov7_VitisAI/
+	
+Change branch
+	git checkout quantize
+
+Install YOLOv7 requirement 
+	pip install -r requirements.txt
+
+Inspect
+	python yolov7_quant.py --data data/furnas.yaml --img 640 --batch-size 4 --conf-thres 0.001 --iou 0.65 --device cpu --weights furnas-tiny.pt --name yolov7-tiny_ptl --inspect --quant_mode float --output_dir "quantize_result/yolov7-tiny_ptl"
+
+Calib
+	python yolov7_quant.py --data data/furnas.yaml --img 640 --batch-size 4 --conf-thres 0.001 --iou 0.65 --device cpu --weights furnas-tiny.pt --name yolov7-tiny_ptl --quant_mode calib  --output_dir "quantize_result/yolov7-tiny_ptl"
+
+test deploy
+	python yolov7_quant.py --data data/furnas.yaml --img 640 --batch-size 4 --conf-thres 0.001 --iou 0.65 --device cpu --weights furnas-tiny.pt --name yolov7-tiny_ptl --quant_mode test --deploy --output_dir "quantize_result/yolov7-tiny_ptl"
+
+compilation
+	vai_c_xir -x quantize_result/yolov7-tiny_ptl/Model_int.xmodel -a /opt/vitis_ai/compiler/arch/DPUCZDX8G/KV260/arch.json -o vai_compile_out -n yolov7-tiny-ptl 
+
+ubuntu server setup on device
+	https://xilinx.github.io/kria-apps-docs/kv260/2022.1/linux_boot/ubuntu_24_04/build/html/docs/sdcard.html
+
+	Download the Kria Ubuntu 24.04 LTS Image : https://ubuntu.com/download/amd#kria-k26 
+
+	Write image to sd card with  Raspberry Pi Imager 
+
+	connect device
+		https://xilinx.github.io/kria-apps-docs/kv260/2022.1/linux_boot/ubuntu_24_04/build/html/docs/connections.html
+
+	connect serial port
+		https://xilinx.github.io/kria-apps-docs/kv260/2022.1/linux_boot/ubuntu_24_04/build/html/docs/uart.html
+
+		For Linux, open a terminal by right-clicking on the desktop and selecting Open In Terminal, and enter the following command to observe which COM ports appear when you plug in the USB cable attached to the Kria Starter Kit into your computer:
+
+		dmesg | grep tty
+
+		Two COM ports should be enumerated. The second numbered COM port corresponds to the UART.​
+
+		Configure your UART within the same terminal. You can also configure your terminal program with the same settings below. These settings are the same as defined in the Windows setup.
+
+		sudo putty /dev/ttyUSB1 -serial -sercfg 115200,8,n,1,N
+
+	boot device
+
+device login
+	using ubuntu server Kria™ K26 SOM
+
+	sudo putty /dev/ttyUSB1 -serial -sercfg 115200,8,n,1,N
+
+	The default login credentials are:
+	username: ubuntu
+	password: ubuntu
+
+	change password
+	new password: ubuntu123
+	new password: lamabanget
+
+	# fix error when app show gtk GUI
+	export DISPLAY=:0.0
+
+shutdown device
+	sudo shutdown now
+
+device login with ssh
+	ssh ubuntu@192.168.1.16
+
+	update package on system
+	sudo add-apt-repository ppa:xilinx-apps --yes &&
+	sudo add-apt-repository ppa:ubuntu-xilinx/sdk --yes &&
+	sudo add-apt-repository ppa:xilinx-apps/xilinx-drivers --yes &&
+	sudo add-apt-repository ppa:lely/ppa --yes &&
+	sudo apt update --yes &&
+	sudo apt upgrade --yes
+
+	if you want to install desktop environment
+	sudo apt update
+	sudo apt install ubuntu-desktop-kria
+	sudo reboot
+
+
+Firmware Update
+	For compatibility with Ubuntu 24.04, download the latest bootfw from K26 Firmware Updates table and follow instructions to update firmware.
+
+	Kria SOM Boot Firmware Update
+	https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/3020685316/Kria+SOM+Boot+Firmware+Update#K26-Boot-Firmware-Updates
+
+	Boot FW Update Process
+	https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/3020685316/Kria+SOM+Boot+Firmware+Update#Boot-FW-Update-Process
+
+	Ubuntu Server 24.04
+		Recommended FW: 01.02 K26 Boot FW Update or later 
+
+	
+
+setup device
+	on device kv260
+
+	git clone https://github.com/Xilinx/Vitis-AI.git
+	cd Vitis-AI
+
+
+clone repo yolov7 vitis on device
+	git clone https://github.com/mm0806son/yolov7_VitisAI.git
+	cd yolov7_VitisAI/
+	git checkout execute_v2
+
+copy compiled mode to device
+	on host
+	tar -zcvf vai_compile_out.tar.gz vai_compile_out/
+	scp [[./vai_compile_out.tar.gz]] ubuntu@192.168.1.16:/home/ubuntu/
+
+	on device extract
+	tar -zxvf vai_compile_out.tar.gz
+	mv vai_compile_out/ Vitis-AI/yolov7_VitisAI/
+
+copy dataset to device
+	on host
+	tar -zcvf furnas_dataset_v0.07.tar.gz furnas_dataset_v0.07/
+	scp [[./furnas_dataset_v0.07.tar.gz]] ubuntu@192.168.1.16:/home/ubuntu/
+
+	on device extract 
+	tar -zxvf furnas_dataset_v0.07.tar.gz
+	mv furnas_dataset_v0.07/ Vitis-AI/
+
+copy dataset yaml
+	on host
+	scp [[./data/furnas.yaml]] ubuntu@192.168.1.16:/home/ubuntu/
+
+	on device extract 
+	mv furnas_dataset_v0.07/ Vitis-AI/yolov7_VitisAI/data/
+
+Run Vitis AI docker on device
+	sudo ./docker_run.sh xilinx/vitis-ai-pytorch-cpu:ubuntu2004-3.0.0.106
+	??? 
+
+
+	
+
