@@ -458,6 +458,7 @@ def train(hyp, opt, device, tb_writer=None):
             if (not opt.nosave) or (final_epoch and not opt.evolve):  # if save
                 ckpt = {'epoch': epoch,
                         'best_fitness': best_fitness,
+                        'metrics': results,
                         'training_results': results_file.read_text(),
                         'model': deepcopy(model.module if is_parallel(model) else model).half(),
                         'ema': deepcopy(ema.ema).half(),
@@ -548,7 +549,9 @@ def train(hyp, opt, device, tb_writer=None):
         with open(gridsearch_csv, 'w') as f:
             f.write('weight,precision,recall,mAP50,mAP50_95,loss_bbox,loss_obj,loss_cls\n')
     with open(gridsearch_csv, 'a') as f:
-        f.write(f'{str(final)},{results[0]},{results[1]},{results[2]},{results[3]},{results[4]},{results[5]},{results[6]}\n')
+        checkpoint = torch.load(final, weights_only=False)
+        metrics = checkpoint.get('metrics', (0, 0, 0, 0, 0, 0, 0)) # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
+        f.write(f'{str(final)},{metrics[0]},{metrics[1]},{metrics[2]},{metrics[3]},{metrics[4]},{metrics[5]},{metrics[6]}\n')
     # -------------------------
 
     return results
