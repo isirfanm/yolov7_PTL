@@ -37,8 +37,15 @@ from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
 
 logger = logging.getLogger(__name__)
 
+# Early stopping params
+early_stop_patience = 10
+best_val_loss = float('inf')
+epochs_no_improve = 0
 
 def train(hyp, opt, device, tb_writer=None):
+    # early stop patience from params
+    early_stop_patience = opt.early_stop
+
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
     save_dir, epochs, batch_size, total_batch_size, weights, rank, freeze = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.total_batch_size, opt.weights, opt.global_rank, opt.freeze
@@ -478,6 +485,20 @@ def train(hyp, opt, device, tb_writer=None):
                             last.parent, opt, epoch, fi, best_model=best_fitness == fi)
                 del ckpt
 
+        # --- Early Stopping Logic ---
+        val_loss = results[2]  # index 2 = obj loss (val)
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+            print(f"No improvement in val loss for {epochs_no_improve} epoch(s)")
+
+        if epochs_no_improve >= early_stop_patience:
+            print(f"\nEarly stopping triggered at epoch {epoch}/{epochs}")
+            break
+        # ----------------------------
+
         # end epoch ----------------------------------------------------------------------------------------------------
     # end training
     if rank in [-1, 0]:
@@ -703,6 +724,7 @@ if __name__ == '__main__':
     parser.add_argument('--artifact_alias', type=str, default="latest", help='version of dataset artifact to be used')
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='Freeze layers: backbone of yolov7=50, first3=0 1 2')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
+    parser.add_argument('--early-stop', type=int, default=10, help='early stopping patience')
     opt = parser.parse_args()
 
     # Set DDP variables
