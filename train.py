@@ -486,7 +486,7 @@ def train(hyp, opt, device, tb_writer=None):
                 del ckpt
 
         # --- Early Stopping Logic ---
-        val_loss = results[2]  # index 2 = obj loss (val)
+        val_loss = results[-2]  # index -2 = obj loss (val)
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             epochs_no_improve = 0
