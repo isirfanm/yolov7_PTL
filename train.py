@@ -542,6 +542,17 @@ def train(hyp, opt, device, tb_writer=None):
     else:
         dist.destroy_process_group()
     torch.cuda.empty_cache()
+
+    # record gridsearch metric
+    final = best if best.exists() else last  # final model
+    gridsearch_csv = Path("gridsearch_results.csv")
+    if not gridsearch_csv.exists():
+        with open(gridsearch_csv, 'w') as f:
+            f.write('weight,precision,recall,mAP50,mAP50_95,loss_cls,loss_bbox,loss_obj\n')
+    with open(gridsearch_csv, 'a') as f:
+        f.write(f'{str(final)},{results[0]},{results[1]},{results[2]},{results[3]},{results[4]},{results[5]},{results[6]}\n')
+    # -------------------------
+
     return results
 
 def main(opt: argparse.Namespace):
