@@ -490,7 +490,7 @@ def train(hyp, opt, device, tb_writer=None):
             epochs_no_improve = 0
         else:
             epochs_no_improve += 1
-            print(f"No improvement in val loss for {epochs_no_improve} epoch(s)")
+            print(f"No improvement in val loss for {epochs_no_improve} epoch(s): best_val_loss({best_val_loss}), val_loss({val_loss})")
 
         if epochs_no_improve >= early_stop_patience:
             print(f"\nEarly stopping triggered at epoch {epoch}/{epochs}")
@@ -546,7 +546,7 @@ def train(hyp, opt, device, tb_writer=None):
     gridsearch_csv = Path("gridsearch_results.csv")
     if not gridsearch_csv.exists():
         with open(gridsearch_csv, 'w') as f:
-            f.write('weight,precision,recall,mAP50,mAP50_95,loss_cls,loss_bbox,loss_obj\n')
+            f.write('weight,precision,recall,mAP50,mAP50_95,loss_bbox,loss_obj,loss_cls\n')
     with open(gridsearch_csv, 'a') as f:
         f.write(f'{str(final)},{results[0]},{results[1]},{results[2]},{results[3]},{results[4]},{results[5]},{results[6]}\n')
     # -------------------------
