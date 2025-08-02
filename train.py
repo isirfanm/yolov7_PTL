@@ -37,14 +37,12 @@ from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
 
 logger = logging.getLogger(__name__)
 
-# Early stopping params
-early_stop_patience = 10
-best_val_loss = float('inf')
-epochs_no_improve = 0
 
 def train(hyp, opt, device, tb_writer=None):
-    # early stop patience from params
+    # Early stopping params
+    best_val_loss = float('inf')
     early_stop_patience = opt.early_stop_patience
+    epochs_no_improve = 0
 
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
     save_dir, epochs, batch_size, total_batch_size, weights, rank, freeze = \
