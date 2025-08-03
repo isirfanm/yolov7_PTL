@@ -488,7 +488,7 @@ def train(hyp, opt, device, tb_writer=None):
         # --- Early Stopping Logic ---
         # val_loss = results[-2]  # index -2 = obj loss (val)
         val_mAP = results[2]  # index 2 = mAP50 (val)
-        if val_mAP < best_val_mAP:
+        if val_mAP > best_val_mAP:
             best_val_mAP = val_mAP
             epochs_no_improve = 0
         else:
