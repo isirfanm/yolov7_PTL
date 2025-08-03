@@ -43,8 +43,7 @@ def train(hyp, opt, device, tb_writer=None):
     # best_val_loss = float('inf')
     best_val_mAP = 0.0
     early_stop_patience = opt.early_stop_patience
-    # early_stop_delta = opt.early_stop_delta
-    early_stop_delta = 0.001
+    early_stop_delta = opt.early_stop_delta
     epochs_no_improve = 0
 
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
@@ -741,7 +740,7 @@ if __name__ == '__main__':
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='Freeze layers: backbone of yolov7=50, first3=0 1 2')
     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
     parser.add_argument('--early-stop-patience', type=int, default=10, help='early stopping patience')
-    # parser.add_argument('--early-stop-delta', type=float, default=0.001, help='early stopping delta')
+    parser.add_argument('--early-stop-delta', type=float, default=0.001, help='early stopping delta')
     opt = parser.parse_args()
 
     # Set DDP variables
