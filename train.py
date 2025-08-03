@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
 
 def train(hyp, opt, device, tb_writer=None):
     # Early stopping params
-    best_val_loss = float('inf')
+    # best_val_loss = float('inf')
+    best_val_mAP = 0.0
     early_stop_patience = opt.early_stop_patience
     epochs_no_improve = 0
 
@@ -485,13 +486,14 @@ def train(hyp, opt, device, tb_writer=None):
                 del ckpt
 
         # --- Early Stopping Logic ---
-        val_loss = results[-2]  # index -2 = obj loss (val)
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        # val_loss = results[-2]  # index -2 = obj loss (val)
+        val_mAP = results[2]  # index 2 = mAP50 (val)
+        if val_mAP < best_val_mAP:
+            best_val_mAP = val_mAP
             epochs_no_improve = 0
         else:
             epochs_no_improve += 1
-            print(f"No improvement in val loss for {epochs_no_improve} epoch(s): best_val_loss({best_val_loss}), val_loss({val_loss})")
+            print(f"No improvement in val mAP for {epochs_no_improve} epoch(s): best_val_mAP({best_val_mAP}), val_mAP({val_mAP})")
 
         if epochs_no_improve >= early_stop_patience:
             print(f"\nEarly stopping triggered at epoch {epoch}/{epochs}")
