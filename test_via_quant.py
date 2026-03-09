@@ -157,8 +157,9 @@ def test(
 
     seen = 0
     confusion_matrix = ConfusionMatrix(nc=nc)
-    # names = {k: v for k, v in enumerate(quant_model.names if hasattr(quant_model, "names") else quant_model.module.names)} # find names from model
-    names = {0: "Boat", 1: "Human"}
+    names = {k: v for k, v in enumerate(model.names if hasattr(model, "names") else model.module.names)} # find names from model
+    # print("names = ", names)
+    # names = {0: "Boat", 1: "Human"}
     s = ("%20s" + "%12s" * 6) % ("Class", "Images", "Labels", "P", "R", "mAP@.5", "mAP@.5:.95")
     p, r, f1, mp, mr, map50, map, t0, t1 = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     loss = torch.zeros(3, device=device)
