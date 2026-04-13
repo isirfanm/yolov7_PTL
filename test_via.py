@@ -63,9 +63,9 @@ def runDPU(dpu, img):
     count = 0
 
     outputData = [
-        np.empty(output_ndim_0, dtype=np.float32, order="C"),
-        np.empty(output_ndim_1, dtype=np.float32, order="C"),
-        np.empty(output_ndim_2, dtype=np.float32, order="C"),
+        np.empty(output_ndim_0, dtype=np.int8, order="C"),
+        np.empty(output_ndim_1, dtype=np.int8, order="C"),
+        np.empty(output_ndim_2, dtype=np.int8, order="C"),
     ]
 
     """prepare batch input/output """
@@ -93,9 +93,9 @@ def runDPU(dpu, img):
     # print(colorstr("green", t1))
 
     # output scaling
-    outputData[0] = torch.from_numpy(outputData[0] / (2 ** outputTensors[0].get_attr("fix_point"))).permute(0, 3, 1, 2)
-    outputData[1] = torch.from_numpy(outputData[1] / (2 ** outputTensors[1].get_attr("fix_point"))).permute(0, 3, 1, 2)
-    outputData[2] = torch.from_numpy(outputData[2] / (2 ** outputTensors[2].get_attr("fix_point"))).permute(0, 3, 1, 2)
+    outputData[0] = torch.from_numpy(outputData[0].astype(np.float32) / (2 ** outputTensors[0].get_attr("fix_point"))).permute(0, 3, 1, 2)
+    outputData[1] = torch.from_numpy(outputData[1].astype(np.float32) / (2 ** outputTensors[1].get_attr("fix_point"))).permute(0, 3, 1, 2)
+    outputData[2] = torch.from_numpy(outputData[2].astype(np.float32) / (2 ** outputTensors[2].get_attr("fix_point"))).permute(0, 3, 1, 2)
 
     return outputData
 
