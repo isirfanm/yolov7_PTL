@@ -152,7 +152,7 @@ def test(
         quant_model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(quant_model.parameters())))  # run once
     task = opt.task if opt.task in ("train", "val", "test") else "val"  # path to train/val/test images
     dataloader = create_dataloader(
-        data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True, prefix=colorstr(f"{task}: ")
+        data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=False, prefix=colorstr(f"{task}: ")
     )[0]
 
     seen = 0
