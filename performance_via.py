@@ -1,9 +1,12 @@
+from typing import List
+
 import cv2
 import numpy as np
 import psutil
 import os
 import time
 import subprocess
+import psutil
 import glob
 import argparse
 import torch
@@ -105,6 +108,28 @@ def read_power_on_idle():
     return power_on_idle
 
 
+def start_cpu_monitor(cpu_file):
+    monitor = subprocess.Popen(
+        ['python3', 'cpu_usage.py', '--cpu_file', cpu_file])
+    return monitor
+
+
+def read_cpu_stats(cpu_file):
+    time.sleep(1)  # make sure the monitor file is ready
+    value = 0
+    with open(cpu_file, 'r') as f:
+        value = float(f.read().strip())
+    return value
+
+
+def read_cpu_on_idle():
+    monitor = start_cpu_monitor('cpu_on_idle.txt')
+    time.sleep(5)
+    monitor.terminate()
+    value = read_cpu_stats('cpu_on_idle.txt')
+    return value
+
+
 def get_image_paths(image):
     print(f"Reading images from: {image}")
     paths = []
@@ -127,7 +152,8 @@ def preprocess(image_path, input_scale):
 
     # Input scaling
     # img_DPU.shape = batch size, height, width, channels
-    img = img.permute(0, 2, 3, 1).float().numpy() / 255 * input_scale
+    img = np.transpose(img, (0, 2, 3, 1)).astype(
+        np.float32) / 255 * input_scale
     img = img.astype(np.int8)
     img = torch.from_numpy(img)
 
@@ -145,14 +171,21 @@ if __name__ == '__main__':
     parser.add_argument('--runs', type=int, default=1,
                         help='How many times to run per image')
     opt = parser.parse_args()
+    print("Arguments parsed.")
+
+    process = psutil.Process(os.getpid())
+
+    # power idle
+    power_on_idle = read_power_on_idle()
+
+    # cpu idle
+    cpu_on_idle = read_cpu_on_idle()
 
     # 2. Load the model
     batch_size = 1
     device = select_device("cpu", batch_size=batch_size)
 
-    power_on_idle = read_power_on_idle()
-
-    process = psutil.Process(os.getpid())
+    # memory usage
     mem_before_load = process.memory_info().rss / (1024 * 1024)
 
     # Detect model on cpu
@@ -168,6 +201,8 @@ if __name__ == '__main__':
 
     model_size = os.path.getsize(opt.model) / (1024 * 1024)
     xmodel_size = os.path.getsize(opt.xmodel) / (1024 * 1024)
+
+    print("Model loaded.")
 
     # 3. Run inference and measure performance
 
@@ -186,9 +221,14 @@ if __name__ == '__main__':
     out_DPU = runDPU(dpu_runner, img)
     out, train_out = forward_detect(model, out_DPU)
 
+    print("Running...")
+
     # start power monitor
     power_monitor = start_power_monitor('power_on_process.txt')
     power_start_time = time.perf_counter()
+
+    # start cpu monitor
+    cpu_monitor = start_cpu_monitor('cpu_on_process.txt')
 
     times = []
     for image_path in image_paths:
@@ -205,6 +245,8 @@ if __name__ == '__main__':
                 times.append((end_time - start_time) * 1000)
 
     power_monitor.terminate()
+    cpu_monitor.terminate()
+
     avg_inference_time = np.mean(times)
 
     power_end_time = time.perf_counter()
@@ -215,6 +257,8 @@ if __name__ == '__main__':
     power_consumption = power_for_process * \
         power_usage_time  # power consumption (mWh) = mW * h
 
+    cpu_on_process = read_cpu_stats('cpu_on_process.txt')
+
     # 4. Print results
     print(f"\n--- {opt.model} Experiment Results ---")
     print(f"- Model Size: {model_size:.4f} MB")
@@ -223,4 +267,5 @@ if __name__ == '__main__':
     print(f"- Inference Time: {avg_inference_time:.4f} ms")
     print(
         f"- Power Consumption: {power_consumption:.4f} mWh [Power for Inference: {power_for_process:.4f} mW, Time for Inference: {power_usage_time:.4f} h]")
+    print(f"- CPU Usage: {(cpu_on_process - cpu_on_idle):.4f} %")
     print("--------------------------------------------------------------------")
