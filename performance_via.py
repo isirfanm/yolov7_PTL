@@ -118,17 +118,12 @@ def get_image_paths(image):
     return paths
 
 
-def preprocess(image_path, img_size=640):
-    img0 = cv2.imread(image_path)
-    if img0 is None:
+def preprocess(image_path, input_scale):
+    img = cv2.imread(image_path)
+    if img is None:
         print(f"Error Image: {image_path}")
         return None
-    img = letterbox(img0, new_shape=img_size)
-    img = img[:, :, ::-1].transpose(2, 0, 1)
-    img = np.ascontiguousarray(img)
-    img = img.astype(np.float32) / 255.0
-    if img.ndim == 3:
-        img = np.expand_dims(img, 0)
+    img = np.expand_dims(img, 0)
 
     # Input scaling
     # img_DPU.shape = batch size, height, width, channels
@@ -187,7 +182,7 @@ if __name__ == '__main__':
     image_paths = get_image_paths(opt.image)
 
     print("Warming up the model...")
-    img = preprocess(image_paths[0])
+    img = preprocess(image_paths[0], input_scale)
     out_DPU = runDPU(dpu_runner, img)
     out, train_out = forward_detect(model, out_DPU)
 
@@ -197,14 +192,14 @@ if __name__ == '__main__':
 
     times = []
     for image_path in image_paths:
-        img = preprocess(image_path)
+        img = preprocess(image_path, input_scale)
         if img is not None:
             print(f"Test: {image_path} (running {opt.runs} times)...")
             for _ in range(opt.runs):
                 start_time = time.perf_counter()
 
                 out_DPU = runDPU(dpu_runner, img)
-                out, train_out = forward_detect(model, out_DPU)
+                forward_detect(model, out_DPU)
 
                 end_time = time.perf_counter()
                 times.append((end_time - start_time) * 1000)
