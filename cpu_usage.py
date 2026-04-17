@@ -27,7 +27,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Monitor and log Kria cpu stats.")
     parser.add_argument('--cpu_file', type=str, default="cpu_log.txt", help="File to log average cpu.")
     args = parser.parse_args()
-    power_file = args.power_file
+    cpu_file = args.cpu_file
 
     print("Collecting cpu data...")
     signal.signal(signal.SIGINT, handle_exit)
