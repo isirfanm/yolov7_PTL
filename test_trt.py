@@ -17,6 +17,109 @@ from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import plot_images, output_to_target, plot_study_txt
 from utils.torch_utils import select_device, time_synchronized, TracedModel
 
+import tensorrt as trt
+import pycuda.driver as cuda
+
+
+class TRTModelWrapper:
+    def __init__(self, engine_path, device):
+        self.device = device
+        self.logger = trt.Logger(trt.Logger.WARNING)
+        self.runtime = trt.Runtime(self.logger)
+
+        with open(engine_path, "rb") as f:
+            self.engine = self.runtime.deserialize_cuda_engine(f.read())
+
+        self.context = self.engine.create_execution_context()
+        self.inputs, self.outputs, self.bindings, self.stream = self._allocate_buffers()
+
+    def _allocate_buffers(self):
+        inputs, outputs, bindings = [], [], []
+        stream = cuda.Stream()
+
+        for binding in self.engine:
+            shape = self.engine.get_binding_shape(binding)
+            dtype = trt.nptype(self.engine.get_binding_dtype(binding))
+
+            # Pin host memory and allocate device VRAM buffers
+            host_mem = cuda.pagelocked_empty(trt.volume(shape), dtype=dtype)
+            device_mem = cuda.mem_alloc(host_mem.nbytes)
+
+            bindings.append(int(device_mem))
+            binding_dict = {"host": host_mem,
+                            "device": device_mem, "shape": shape, "dtype": dtype}
+
+            if self.engine.binding_is_input(binding):
+                self.input_shape = shape
+                inputs.append(binding_dict)
+            else:
+                outputs.append(binding_dict)
+
+        return inputs, outputs, bindings, stream
+
+    def __call__(self, im_tensor):
+        """
+        Adapts PyTorch DataLoader tensors into TensorRT memory bindings.
+        Handles both FP32, FP16, and INT8 engines automatically at execution time.
+        """
+        # Ensure tensor is float32 on CPU as a contiguous numpy array
+        if im_tensor.is_cuda:
+            im_tensor = im_tensor.cpu()
+        input_data = im_tensor.numpy().astype(np.float32)
+
+        # 1. Fill Host Buffer
+        np.copyto(self.inputs[0]["host"], input_data.ravel())
+
+        # 2. Upload Host Memory to GPU Device Buffer
+        cuda.memcpy_htod_async(
+            self.inputs[0]["device"], self.inputs[0]["host"], self.stream)
+
+        # 3. Compute Quantized Graph
+        self.context.execute_async_v2(
+            bindings=self.bindings, stream_handle=self.stream.handle)
+
+        # 4. Download Device Memory Buffers back to Host
+        for out in self.outputs:
+            cuda.memcpy_dtoh_async(out["host"], out["device"], self.stream)
+
+        self.stream.synchronize()
+
+        # 5. Extract fixed shapes from end-to-end engine outputs
+        # Struct: [num_dets, detection_boxes, detection_scores, detection_classes]
+        num_dets = self.outputs[0]["host"].reshape(self.outputs[0]["shape"])
+        boxes = self.outputs[1]["host"].reshape(self.outputs[1]["shape"])
+        scores = self.outputs[2]["host"].reshape(self.outputs[2]["shape"])
+        classes = self.outputs[3]["host"].reshape(self.outputs[3]["shape"])
+
+        batch_size = input_data.shape[0]
+        wrapped_predictions = []
+
+        # Convert absolute model output metrics back to yolov7 test.py legacy format
+        for b in range(batch_size):
+            valid_count = int(num_dets[b][0] if len(
+                num_dets.shape) > 1 else num_dets[b])
+            if valid_count == 0:
+                wrapped_predictions.append(
+                    torch.zeros((0, 6), device=self.device))
+                continue
+
+            # Slice current batch element arrays
+            b_boxes = boxes[b][:valid_count]      # [N, 4] -> (x1, y1, x2, y2)
+            b_scores = scores[b][:valid_count]    # [N]
+            b_classes = classes[b][:valid_count]  # [N]
+
+            # Reconstruct legacy tracking metrics layout matrix: [x1, y1, x2, y2, conf, class_id]
+            pred_matrix = np.zeros((valid_count, 6), dtype=np.float32)
+            pred_matrix[:, :4] = b_boxes
+            pred_matrix[:, 4] = b_scores
+            pred_matrix[:, 5] = b_classes
+
+            wrapped_predictions.append(
+                torch.from_numpy(pred_matrix).to(self.device))
+
+        # Return structured list mimicking post-NMS PyTorch tensors
+        return [wrapped_predictions]
+
 
 def test(data,
          weights=None,
@@ -43,35 +146,38 @@ def test(data,
          v5_metric=False):
     # Initialize/load model and set device
     training = model is not None
-    if training:  # called by train.py
-        device = next(model.parameters()).device  # get model device
+    # if training:  # called by train.py
+    #     device = next(model.parameters()).device  # get model device
 
-    else:  # called directly
-        set_logging()
-        device = select_device(opt.device, batch_size=batch_size)
+    # else:  # called directly
+    set_logging()
+    device = select_device(opt.device, batch_size=batch_size)
 
-        # Directories
-        save_dir = Path(increment_path(Path(opt.project) /
-                        opt.name, exist_ok=opt.exist_ok))  # increment run
-        (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True,
-                                                              exist_ok=True)  # make dir
+    # Directories
+    save_dir = Path(increment_path(Path(opt.project) /
+                    opt.name, exist_ok=opt.exist_ok))  # increment run
+    (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True,
+                                                          exist_ok=True)  # make dir
 
-        # Load model
-        model = attempt_load(weights, map_location=device)  # load FP32 model
-        gs = max(int(model.stride.max()), 32)  # grid size (max stride)
-        imgsz = check_img_size(imgsz, s=gs)  # check img_size
+    # Load model
+    model = attempt_load(weights, map_location=device)  # load FP32 model
+    model_trt = TRTModelWrapper(weights, device)
+    gs = max(int(model.stride.max()), 32)  # grid size (max stride)
+    # imgsz = check_img_size(imgsz, s=gs)  # check img_size
+    imgsz = model_trt.input_shape[2]  # Dynamically read target dimension
 
-        if trace:
-            model = TracedModel(model, device, imgsz)
+    if trace:
+        model = TracedModel(model, device, imgsz)
 
     # Half
     # half precision only supported on CUDA
-    half = device.type != 'cpu' and half_precision
+    # half = device.type != 'cpu' and half_precision
+    half = False  # Quantization precision is handled natively inside the .engine file
     if half:
         model.half()
 
     # Configure
-    model.eval()
+    # model.eval()
     if isinstance(data, str):
         is_coco = data.endswith('coco.yaml')
         with open(data) as f:
@@ -87,14 +193,14 @@ def test(data,
     if wandb_logger and wandb_logger.wandb:
         log_imgs = min(wandb_logger.log_imgs, 100)
     # Dataloader
-    if not training:
-        if device.type != 'cpu':
-            model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(
-                next(model.parameters())))  # run once
-        # path to train/val/test images
-        task = opt.task if opt.task in ('train', 'val', 'test') else 'val'
-        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True,
-                                       prefix=colorstr(f'{task}: '))[0]
+    # if not training:
+    if device.type != 'cpu':
+        model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(
+            next(model.parameters())))  # run once
+    # path to train/val/test images
+    task = opt.task if opt.task in ('train', 'val', 'test') else 'val'
+    dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True,
+                                   prefix=colorstr(f'{task}: '))[0]
 
     if v5_metric:
         print("Testing with YOLOv5 AP metric...")
@@ -120,14 +226,15 @@ def test(data,
             # Run model
             t = time_synchronized()
             # inference and training outputs
-            out, train_out = model(img, augment=augment)
+            # out, train_out = model(img, augment=augment)
+            out = model_trt(img)
             t0 += time_synchronized() - t
 
             # Compute loss
-            if compute_loss:
-                # box, obj, cls
-                loss += compute_loss([x.float()
-                                     for x in train_out], targets)[1][:3]
+            # if compute_loss:
+            #     # box, obj, cls
+            #     loss += compute_loss([x.float()
+            #                          for x in train_out], targets)[1][:3]
 
             # Run NMS
             # to pixels
@@ -137,8 +244,10 @@ def test(data,
                   # for autolabelling
                   for i in range(nb)] if save_hybrid else []
             t = time_synchronized()
-            out = non_max_suppression(
-                out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
+            # Map predictions directly (bypassing PyTorch non_max_suppression script)
+            out = out[0] 
+            # out = non_max_suppression(
+            #     out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
             t1 += time_synchronized() - t
 
         # Statistics per image
