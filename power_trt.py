@@ -4,6 +4,7 @@ import time
 import signal
 import os
 import argparse
+# sudo pip3 install jetson-stats
 from jtop import jtop
 
 
