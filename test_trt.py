@@ -143,7 +143,8 @@ def test(data,
          half_precision=True,
          trace=False,
          is_coco=False,
-         v5_metric=False):
+         v5_metric=False,
+         engine="yolov7.engine"):
     # Initialize/load model and set device
     training = model is not None
     # if training:  # called by train.py
@@ -161,7 +162,7 @@ def test(data,
 
     # Load model
     model = attempt_load(weights, map_location=device)  # load FP32 model
-    model_trt = TRTModelWrapper(weights, device)
+    model_trt = TRTModelWrapper(engine, device)
     gs = max(int(model.stride.max()), 32)  # grid size (max stride)
     # imgsz = check_img_size(imgsz, s=gs)  # check img_size
     imgsz = model_trt.input_shape[2]  # Dynamically read target dimension
@@ -245,7 +246,7 @@ def test(data,
                   for i in range(nb)] if save_hybrid else []
             t = time_synchronized()
             # Map predictions directly (bypassing PyTorch non_max_suppression script)
-            out = out[0] 
+            out = out[0]
             # out = non_max_suppression(
             #     out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, multi_label=True)
             t1 += time_synchronized() - t
@@ -480,6 +481,11 @@ if __name__ == '__main__':
                         help='don`t trace model')
     parser.add_argument('--v5-metric', action='store_true',
                         help='assume maximum recall as 1.0 in AP calculation')
+
+    # TRT specific arguments
+    parser.add_argument("--engine", type=str,
+                        default="yolov7.engine", help="Path of engine.")
+
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.data = check_file(opt.data)  # check file
@@ -501,7 +507,8 @@ if __name__ == '__main__':
              save_hybrid=opt.save_hybrid,
              save_conf=opt.save_conf,
              trace=not opt.no_trace,
-             v5_metric=opt.v5_metric
+             v5_metric=opt.v5_metric,
+             engine=opt.engine
              )
 
     elif opt.task == 'speed':  # speed benchmarks
